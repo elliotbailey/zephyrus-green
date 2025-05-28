@@ -11,23 +11,25 @@
 #include <zephyr/sys/printk.h>
 #include <string.h>
 #include "auth.h"
+#include "zephyr/net/net_ip.h"
 #include "zephyr/net/wifi.h"
+#include <string.h>
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
-
-// #define SERVER_NAME "lunar-river-product.glitch.me"
-// #define SERVER_PORT "3000"
-
-// static const char http_request[] =
-//     "GET / HTTP/1.1\r\n"
-//     "Host: " SERVER_NAME "\r\n"
-//     "Connection: close\r\n\r\n";
 
 static int connect_wifi(void);
 void wifi_status(void);
 void setup_wifi(void);
+int connect_to_ip(void);
 
 K_SEM_DEFINE(wifi_sem, 0, 1);
+
+/* Simple HTTP GET for "/hello" */
+static const char http_request[] =
+    "GET / HTTP/1.1\r\n"
+    "Host: " SERVER_IP "\r\n"
+    "Connection: close\r\n"
+    "\r\n";
 
 static struct net_mgmt_event_callback wifi_cb;
 
@@ -35,7 +37,33 @@ int main(void) {
 
     init_rtc();
     setup_wifi();
+    printk("Here\n");
     k_sem_take(&wifi_sem, K_FOREVER);
+
+    printk("Here 2\n");
+    int sock = connect_to_ip();
+    int ret = zsock_send(sock, http_request, strlen(http_request), 0);
+    if (ret < 0) {
+        printk("HTTP send failed: %d\n", ret);
+        return -1;
+    }
+
+    char buf[512];
+    while (true) {
+        int rx = zsock_recv(sock, buf, sizeof(buf) - 1, 0);
+        if (rx > 0) {
+            buf[rx] = '\0';
+            printk("%s", buf);
+        } else if (rx == 0) {
+            /* peer closed cleanly */
+            break;
+        } else {
+            printk("HTTP recv error: %d\n", rx);
+            break;
+        }
+    }
+
+    printk("\n");
 
 
     while (1) {
@@ -115,4 +143,76 @@ static int connect_wifi(void) {
         return ret;
     }
     return 0;
+}
+
+
+static void http_response_cb(struct http_response *rsp,
+			enum http_final_call final_data,
+			void *user_data)
+{
+	if (final_data == HTTP_DATA_MORE) {
+		//printk("Partial data received (%zd bytes)\n", rsp->data_len);
+	} else if (final_data == HTTP_DATA_FINAL) {
+		//printk("All the data received (%zd bytes)\n", rsp->data_len);
+	}
+
+	//printk("Bytes Recv %zd\n", rsp->data_len);
+	//printk("Response status %s\n", rsp->http_status);
+	//printk("Recv Buffer Length %zd\n", rsp->recv_buf_len);
+	printk("%.*s", rsp->data_len, rsp->recv_buf);
+}
+
+
+void http_get(int sock, char * hostname, char * url)
+{
+	struct http_request req = { 0 };
+	static uint8_t recv_buf[512];
+	int ret;
+
+	req.method = HTTP_GET;
+	req.url = url;
+	req.host = hostname;
+	req.protocol = "HTTP/1.1";
+	req.response = http_response_cb;
+	req.recv_buf = recv_buf;
+	req.recv_buf_len = sizeof(recv_buf);
+
+	/* sock is a file descriptor referencing a socket that has been connected
+	* to the HTTP server.
+	*/
+	ret = http_client_req(sock, &req, 5000, NULL);
+}
+
+
+int connect_to_ip(void) {
+    // create socket
+    int sock = zsock_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (sock < 0) {
+        printk("Socket creation failed: %d\n", sock);
+        return -1;
+    }
+
+    // generate address info
+    struct sockaddr_in addr = {
+        .sin_family = AF_INET,
+        .sin_port = htons(SERVER_PORT),
+    };
+
+    if (zsock_inet_pton(AF_INET, SERVER_IP, &addr.sin_addr) != 1) {
+        printk("inet_pton failed\n");
+        zsock_close(sock);
+        return -1;
+    }
+
+    printk("Connecting to %s:%u… ", SERVER_IP, SERVER_PORT);
+
+    int ret = zsock_connect(sock, (struct sockaddr*)&addr, sizeof(addr));
+    if (ret) {
+        printk("Failed to connect: %d\n", ret);
+        zsock_close(sock);
+        return -1;
+    }
+
+    printk("Successfully connected to socket!\n");
+    return sock;
 }
