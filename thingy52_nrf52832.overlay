@@ -1,0 +1,21 @@
+/ {
+	chosen {
+		zephyr,console = &rtt0;
+	};
+
+	rtt0: rtt_chan0 {
+		compatible = "segger,rtt-uart";
+		status = "okay";
+	};
+};
+
+&rtc0 {
+    status = "okay";
+    prescaler = <4>;
+};
+
+/ {
+    aliases {
+        button0 = &button0;
+    };
+};

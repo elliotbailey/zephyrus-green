@@ -50,3 +50,9 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# secret files
+auth.h
+.cache
+build/
+__pycache__/
