@@ -5,6 +5,8 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/timer/system_timer.h>
 #include <zephyr/sys/time_units.h>
+#include <stdlib.h>
+#include <math.h>
 #include "ultrasonic_handler.h"
 
 
@@ -57,25 +59,25 @@ float ultrasonic_read(void) {
     k_msleep(50);
     // Speed of sound assumed
     //printf("Duration=%d\n", pulse_duration);
-    return ((pulse_duration / 1000000.0f) * 343.0f / 2.0f);
+    return fmin(((pulse_duration / 1000000.0f) * 343.0f / 2.0f), 3.00);
 }
 
 void ultrasonic_publish(int category) {
-    printf("Category %d\n", category);
+    //printf("Category %d\n", category);
     
     if (category == 1) {
         gpio_pin_toggle(mqtt_port, 5);
-        int pin_state = gpio_pin_get_raw(mqtt_port, 5);
-        printf("Pin state before wait: %d\n", pin_state);
+        //int pin_state = gpio_pin_get_raw(mqtt_port, 5);
+        //printf("Pin state before wait: %d\n", pin_state);
         k_msleep(500);
     } else if (category == 2) {
         gpio_pin_toggle(mqtt_port, 6);
         k_msleep(500);
     } else if (category == 3) {
-        gpio_pin_toggle(mqtt_port, 7);
-        k_msleep(500);
+        //gpio_pin_toggle(mqtt_port, 7);
+        //k_msleep(500);
     }
     
-    gpio_pin_toggle(mqtt_port, 5);
+    //gpio_pin_toggle(mqtt_port, 5);
     k_msleep(500);
 }

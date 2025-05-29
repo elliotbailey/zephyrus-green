@@ -44,15 +44,13 @@ void setup(void)
 	 */
 	
 	static tflite::MicroMutableOpResolver < 10 > micro_op_resolver; /* NOLINT */
-	micro_op_resolver.AddConv2D();           // For Conv1D (implemented as Conv2D)
-	micro_op_resolver.AddFullyConnected();   // For Dense layers
-	micro_op_resolver.AddSoftmax();          // For final activation
-	micro_op_resolver.AddMean();             // For GlobalAveragePooling1D
-	micro_op_resolver.AddReshape();          // Likely needed for tensor reshaping
-	micro_op_resolver.AddAdd();              // For BatchNormalization
-	micro_op_resolver.AddMul();              // For BatchNormalization
-	micro_op_resolver.AddQuantize();         // For quantization
-	micro_op_resolver.AddDequantize();       // For dequantization
+	micro_op_resolver.AddConv2D();
+	micro_op_resolver.AddRelu();
+	micro_op_resolver.AddFullyConnected();
+	micro_op_resolver.AddSoftmax();
+	micro_op_resolver.AddReshape();
+	micro_op_resolver.AddQuantize();
+	micro_op_resolver.AddDequantize();
 	micro_op_resolver.AddExpandDims();
 
 	/* Build an interpreter to run the model with. */
@@ -72,7 +70,7 @@ void setup(void)
 	if ((model_input->dims->size != 3) ||
 	    (model_input->dims->data[0] != 1) ||
 	    (model_input->dims->data[1] != 30) ||
-        (model_input->dims->data[2] != 1) ||
+        (model_input->dims->data[2] != 3) ||
 	    (model_input->type != kTfLiteUInt8)) {
 		printf("model_input->type = %d (expected %d)\n", model_input->type, kTfLiteUInt8);
 		printf("Bad input tensor parameters in model\n");
@@ -82,7 +80,7 @@ void setup(void)
 		return;
 	}
 
-	input_length = model_input->bytes / sizeof(int8_t); // Should be 30
+	input_length = model_input->bytes / sizeof(int8_t);
 	
 	ultrasonic_init();
 }
@@ -91,17 +89,32 @@ void loop(void)
 {
     static float ul_buff[30];
     static int ref_index = 0;
-	/* Attempt to read new data from the ultrasonic ranger. */
+	
 	ul_buff[ref_index++] = ultrasonic_read();
+	//printf("%f\n", ul_buff[ref_index - 1]);
+
 	//printf("%d, %f\n", ref_index - 1, ul_buff[ref_index - 1]);
 	
     if (ref_index < 30) {
-        // Needs more sample to complete the time series
+        // Needs more sampling to complete the time series
         return;
     }
 
     // Full time series collected
     ref_index = 0;
+
+	// Calculate necessary information from time series
+	static float vel[30];
+	for (int i = 0; i < 29; i++) {
+		vel[i] = ul_buff[i + 1] - ul_buff[i];
+	}
+	vel[29] = vel[28];
+	static float accel[30];
+	for (int i = 0; i < 28; i++) {
+		accel[i] = vel[i + 1] - vel[i];
+	}
+	accel[28] = accel[27];
+	accel[29] = accel[28];
 	
     // Quantisation
     for (int i = 0; i < 30; i++) {
@@ -110,6 +123,18 @@ void loop(void)
         quantized_value = std::max(-128, quantized_value);
         quantized_value = std::min(127, quantized_value);
         model_input->data.int8[i] = static_cast<int8_t>(quantized_value);
+
+		quantized_value = static_cast<int32_t>(round(vel[i] / model_input->params.scale) + model_input->params.zero_point);
+        // Clip Quantised Values
+        quantized_value = std::max(-128, quantized_value);
+        quantized_value = std::min(127, quantized_value);
+        model_input->data.int8[i + 30] = static_cast<int8_t>(quantized_value);
+
+		quantized_value = static_cast<int32_t>(round(accel[i] / model_input->params.scale) + model_input->params.zero_point);
+        // Clip Quantised Values
+        quantized_value = std::max(-128, quantized_value);
+        quantized_value = std::min(127, quantized_value);
+        model_input->data.int8[i + 60] = static_cast<int8_t>(quantized_value);
     }
 	
 
@@ -122,22 +147,30 @@ void loop(void)
 	}
 	TfLiteTensor* output = interpreter->output(0);
 	int8_t* quantized_prob_dist = output->data.int8;
-	float dequantized_prob_dist[4] = {0};
+	float dequantized_prob_dist[3] = {0};
     int max_likelihood_index = 0;
 	//printf("Zero Point: %d\n", output->params.zero_point);
 	//printf("Scale: %f\n", output->params.scale);
-	for (int i = 0; i < 4; i++) {
+	for (int i = 0; i < 3; i++) {
 		dequantized_prob_dist[i] = output->params.scale * (quantized_prob_dist[i] - output->params.zero_point);
 		//printf("Prob-Dist: %d, %d, %f\n", i, quantized_prob_dist[i], dequantized_prob_dist[i]);
 	}
-    for (int i = 0; i < 4; i++) {
-        if (dequantized_prob_dist[i] < dequantized_prob_dist[max_likelihood_index]) {
+    for (int i = 0; i < 3; i++) {
+        if ((dequantized_prob_dist[i] > dequantized_prob_dist[max_likelihood_index]) && i != 2) {
             max_likelihood_index = i;
         }
 		//printf("Prob-Dist: %d, %d\n", i, quantized_prob_dist[i]);
+		
     }
     
     int selected_category = max_likelihood_index + 1;
+	if (quantized_prob_dist[2] > 2) {
+		selected_category = 3;
+	} else if (quantized_prob_dist[1] > -6) {
+		selected_category = 2;
+	} else {
+		selected_category = 1;
+	}
 	//printf("selected=%d\n", selected_category);
 	ultrasonic_publish(selected_category);
 	if (selected_category == 1) {
@@ -148,7 +181,7 @@ void loop(void)
         printf("Higher Volume\n");
     } else if (selected_category == 3) {
         // Swipe across
-        printf("Make a Noise\n");
+        printf("No Gesture Detected ...\n");
     }
     // Else remain IDLE
 }
