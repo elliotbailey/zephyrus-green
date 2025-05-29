@@ -1,4 +1,5 @@
 #include <stddef.h>
+#include <stdint.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/rtc.h>
@@ -11,17 +12,35 @@
 #include <stdio.h>
 #include "wifi.h"
 #include "socket.h"
+#include "zephyr/sys/util.h"
 #include <stdbool.h>
+#include "ferry.h"
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
 void process_received_packet(char* packet_buf);
-void send_volume_change(bool up);
+void handle_volume_change(void);
+void send_volume(int volume);
 void receive_ferry_packet(char* packet_buf, size_t packet_buf_size);
+void send_arriving(int mmsi);
+void send_departing(int mmsi);
+void ferry_arriving_action(int mmsi);
+void ferry_departing_action(int mmsi);
 
-/* Simple HTTP GET for "/hello" */
+int current_volume = 100;
+
+struct coordinates UQ_FERRY_TERMINAL = {-27.496776268829635, 153.0195395998301};
+
+/* HTTP get for ferry data */
 static const char GET_REQ_FERRY[] =
     "GET /ferry HTTP/1.1\r\n"
+    "Host: " SERVER_IP "\r\n"
+    "Connection: close\r\n"
+    "\r\n";
+
+/* HTTP get for volume change data */
+static const char GET_VOL_CHANGE[] =
+    "GET /volumechange HTTP/1.1\r\n"
     "Host: " SERVER_IP "\r\n"
     "Connection: close\r\n"
     "\r\n";
@@ -37,8 +56,8 @@ int main(void) {
 
         process_received_packet(packet_buf);
 
-        k_sleep(K_MSEC(3000));
-        send_volume_change(true);
+        k_sleep(K_MSEC(100));
+        handle_volume_change();
     }
 
 
@@ -75,18 +94,104 @@ void receive_ferry_packet(char* packet_buf, size_t packet_buf_size) {
             break;
         }
     }
-    zsock_close(sock);
+    int closeret = zsock_close(sock);
+    if (closeret < 0) {
+        printk("Socket close error rx ferry: %d\n", closeret);
+    }
     printk("\n");
+}
+
+
+void handle_volume_change(void) {
+    char packet_buf[128];
+    int sock = connect_to_ip();
+    int ret = zsock_send(sock, GET_VOL_CHANGE, strlen(GET_VOL_CHANGE), 0);
+    if (ret < 0) {
+        printk("HTTP send failed: %d\n", ret);
+        return;
+    }
+    
+    while (true) {
+        int rx = zsock_recv(sock, packet_buf, sizeof(packet_buf) - 1, 0);
+        if (rx > 0) {
+            packet_buf[rx] = '\0';
+            printk("%s", packet_buf);
+        } else if (rx == 0) {
+            /* peer closed cleanly */
+            break;
+        } else {
+            printk("HTTP recv error: %d\n", rx);
+            break;
+        }
+    }
+    int closeret = zsock_close(sock);
+    if (closeret < 0) {
+        printk("Socket close error handle volume change: %d\n", closeret);
+    }
+    printk("\n");
+
+    // process packet
+    int status, change;
+    if (sscanf(packet_buf, "{\"status\":%d,\"change\":%d", &status, &change) == 2) {
+        printk("parsed: status=%d, change=%dn", status, change);
+
+        if (change == -1 || status == 404) return;   // no change required
+
+        if (change == 0) {
+            // decrease volume
+            current_volume = MAX(0, current_volume - 10);
+        } else {
+            // increase volume
+            current_volume = MIN(255, current_volume + 10);
+        }
+
+        // send change back
+        send_volume(current_volume);
+    } else {
+        printk("JSON parse failed for volume change\n");
+    }
 }
 
 
 void process_received_packet(char* packet_buf) {
     double lat, lon;
     int status;
+    int32_t mmsi;
     if (sscanf(packet_buf,
-           "{\"status\":%d,\"lat\":%lf,\"lon\":%lf",
-           &status, &lat, &lon) == 3) {
-        printk("parsed: status=%d, lat=%f, lon=%f\n", status, lat, lon);
+           "{\"status\":%d,\"mmsi\":%d,\"lat\":%lf,\"lon\":%lf",
+           &status, &mmsi, &lat, &lon) == 4) {
+        printk("parsed: status=%d, mmsi=%d, lat=%f, lon=%f\n", status, mmsi, lat, lon);
+
+        if (status == 404) return;
+        
+        struct coordinates ferryCoords = {lat, lon};
+        // attempt to get ferry
+        struct ferry *existing_ferry = get_ferry_by_mmsi(mmsi);
+        if (existing_ferry == NULL) {
+            // add new ferry
+            double dist = distance_between_coords(ferryCoords, UQ_FERRY_TERMINAL);
+            bool near = dist < 100;
+            struct ferry new_ferry = {mmsi, near, ferryCoords};
+            track_new_ferry(new_ferry);
+            if (near) {
+                // new ferry is near terminal
+                ferry_arriving_action(mmsi);
+            }
+        } else{
+            // update existing ferry coords
+            existing_ferry->coords.lat = lat;
+            existing_ferry->coords.lon = lon;
+
+            bool near = is_ferry_near_coords(*existing_ferry, UQ_FERRY_TERMINAL);
+            if (near && !existing_ferry->near_terminal) {
+                // This means that an existing ferry has now moved close to a terminal and it wasn't before
+                ferry_arriving_action(mmsi);
+            } else if (!near && existing_ferry->near_terminal) {
+                // existing ferry has moved away from a terminal
+                ferry_departing_action(mmsi);
+            }
+            existing_ferry->near_terminal = near;
+        }
     } else {
         printk("JSON parse failed\n");
     }
@@ -120,16 +225,44 @@ void send_post(char* endpoint, char* body) {
         printk("HTTP POST send failed: %d\n", ret);
         return;
     }
-    zsock_close(sock);
+    int closeret = zsock_close(sock);
+    if (closeret < 0) {
+        printk("Socket close error send post: %d\n", closeret);
+    }
 }
 
-void send_volume_change(bool up) {
-    char* body;
-    if (up) {
-        body = "{\"direction\":\"up\"}";
-    } else {
-        body = "{\"direction\":\"down\"}";
-    }
+void send_volume(int volume) {
+    char body[64];
+    snprintf(body, sizeof(body), "{\"volume\":\"%d\"}", volume);
 
     send_post("volume", body);
+}
+
+
+void send_arriving(int mmsi) {
+    char body[64];
+    snprintf(body, sizeof(body), "{\"mmsi\":\"%d\"}", mmsi);
+
+    send_post("arriving", body);
+}
+
+
+void send_departing(int mmsi) {
+    char body[64];
+    snprintf(body, sizeof(body), "{\"mmsi\":\"%d\"}", mmsi);
+
+    send_post("departing", body);
+}
+
+
+void ferry_arriving_action(int mmsi) {
+    printk("Ferry %d has arrived at terminal\n", mmsi);
+    // send update to webserver
+    send_arriving(mmsi);
+}
+
+void ferry_departing_action(int mmsi) {
+    printk("Ferry %d has left terminal\n", mmsi);
+    // send update to webserver
+    send_departing(mmsi);
 }

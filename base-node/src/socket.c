@@ -13,6 +13,9 @@ int connect_to_ip(void) {
         printk("Socket creation failed: %d\n", sock);
         return -1;
     }
+    struct timeval tv = { .tv_sec = 5, .tv_usec = 0 };
+    zsock_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    zsock_setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 
     // generate address info
     struct sockaddr_in addr = {
