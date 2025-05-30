@@ -12,11 +12,34 @@
 #include <stdio.h>
 #include "wifi.h"
 #include "socket.h"
+#include "zephyr/drivers/usb/usb_dc.h"
 #include "zephyr/sys/util.h"
 #include <stdbool.h>
 #include "ferry.h"
+#include <zephyr/fs/fs.h>
+#include <zephyr/device.h>
+#include <zephyr/storage/flash_map.h>
+#include <zephyr/usb/usb_device.h>
+#include <zephyr/usb/usbd.h>
+#include <zephyr/usb/class/usbd_msc.h>
+#include <zephyr/storage/disk_access.h>
+#include <ff.h>
+
+#define MKFS_FS_TYPE FS_FATFS
+#define MKFS_DEV_ID "NAND:"
+#define MKFS_FLAGS 0
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
+static FATFS fat_fs;
+
+static struct fs_mount_t fat_storage_mnt = {
+    .type = FS_FATFS,
+    .fs_data = &fat_fs,
+    .storage_dev = (void *)"NAND",
+    .mnt_point = "/NAND:",
+    .flags = MKFS_FLAGS
+};
+
 
 void process_received_packet(char* packet_buf);
 void handle_volume_change(void);
@@ -26,6 +49,9 @@ void send_arriving(int mmsi);
 void send_departing(int mmsi);
 void ferry_arriving_action(int mmsi);
 void ferry_departing_action(int mmsi);
+void fs_init(void);
+void mount_fs();
+static void usb_status_cb(enum usb_dc_status_code status, const uint8_t *param);
 
 int current_volume = 100;
 
@@ -46,6 +72,9 @@ static const char GET_VOL_CHANGE[] =
     "\r\n";
 
 int main(void) {
+
+    mount_fs();
+    usb_enable(usb_status_cb);
 
     init_rtc();
     setup_wifi();
@@ -265,4 +294,47 @@ void ferry_departing_action(int mmsi) {
     printk("Ferry %d has left terminal\n", mmsi);
     // send update to webserver
     send_departing(mmsi);
+}
+
+
+void fs_init(void) {
+    int rc = fs_mkfs(MKFS_FS_TYPE, (uintptr_t)MKFS_DEV_ID, NULL, MKFS_FLAGS);
+    if (rc != 0) {
+        printk("FS MKFS Failed: %d\n", rc);
+    } else {
+        printk("FS MKFS Success\n");
+    }
+}
+
+/**
+ * Mounts the file system
+ */
+void mount_fs() {
+
+    int rc;
+    rc = fs_mount(&fat_storage_mnt);
+
+    if (rc != 0) {
+        printk("Failed to mount FS: %d\n", rc);
+    }
+
+}
+
+
+static void usb_status_cb(enum usb_dc_status_code status, const uint8_t *param)
+{
+    printk("USB status: %d\n", status);
+    switch (status) {
+    case USB_DC_CONFIGURED:
+        printk("USB CONNECTED\n");
+        break;
+
+    case USB_DC_DISCONNECTED:
+    case USB_DC_SUSPEND:
+        printk("USB DISCONNECTED/SUSPENDED\n");
+        break;
+
+    default:
+        break;
+    }
 }
