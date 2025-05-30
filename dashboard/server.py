@@ -159,6 +159,20 @@ async def get_volume_change():
     }
 
 
+@app.get("/rtc")
+async def get_time():
+    year, month, day, hour, minute, second = time.localtime()[:6]
+
+    return {
+        "year": year,
+        "mon": month,
+        "day": day,
+        "hour": hour,
+        "min": minute,
+        "sec": second
+    }
+
+
 def send_volume_to_speaker(volume):
     logger.info(f"Sending volume to speaker: {volume}")
     client.publish(MQTT_SPEAKER_TOPIC, payload=f"Volume {volume}", qos=1)
