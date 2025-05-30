@@ -198,7 +198,7 @@ async def get_volume_change():
     # There is a volume update present
     change = volume_changes.pop(0)
 
-    logger.info("Disco got volume change")
+    logger.info(f"Disco got volume change: {change}")
 
     return {
         "status": 200,
@@ -236,8 +236,10 @@ async def get_current_volume():
         "volume": volume
     }
 
+
 @app.post("/volume")
 async def change_volume(vol: VolumeReq):
+    global volume
     volume = vol.volume
     send_volume_to_speaker(vol.volume)
     return {"status": "ok"}
@@ -307,19 +309,27 @@ current_position_data = []
 def supply_ferry_data_thread():
     global current_position_data
 
-    DELAY = 4
+    DELAY = 2.5
+
+    ferry_dir = [-1, -1, -1]
 
     while True:
         # Move ferry's index to next coordinate for all ferries in the list
         for i in range(len(ferrys)):  # ferrys: list[int]
             # logger.info("Ferry index")
-            ferry_index[i] += 1  # Increase index for the ferry
+            ferry_index[i] += 1 * ferry_dir[i] # Increase index for the ferry
         # Add ferry to queue with updated coordinate
         for ferry_no, mmsi in enumerate(ferrys):
             if ferry_index[ferry_no] >= len(FERRY_PATH_COORDS):
                 # Assert the current_ferry_index is at the end bound of the list
-                ferry_index[ferry_no] = 0  # Reset to the first list position
+                # ferry_index[ferry_no] = 0  # Reset to the first list position
+                ferry_dir[ferry_no] = ferry_dir[ferry_no] * -1
+                ferry_index[ferry_no] -= 1
                 # Get the current index for the updated current ferry
+                current_ferry_index = ferry_index[ferry_no]
+            elif ferry_index[ferry_no] <= 0:
+                ferry_dir[ferry_no] = ferry_dir[ferry_no] * -1
+                ferry_index[ferry_no] = 1
                 current_ferry_index = ferry_index[ferry_no]
             else:
                 # Assert the current ferry index is not at the bounds of the list
@@ -327,7 +337,7 @@ def supply_ferry_data_thread():
 
             # Return the coordinates associated with the current ferry index
             lat, long = FERRY_PATH_COORDS[current_ferry_index]
-            logger.info(f"Ferry No. {ferry_no}, Ferry data: {mmsi} {lat} {long}")
+            # logger.info(f"Ferry No. {ferry_no}, Ferry data: {mmsi} {lat} {long}")
 
             # Display current position on dashboard
             # Add ferry data for each ferry to the current position list,
@@ -353,9 +363,12 @@ def supply_ferry_data_thread():
             # FOR BASENODE: Append a list to the queue [MMSI, LAT, LONG]  
             ferry_data_queue.append([mmsi, lat, long])
 
-            if len(ferry_data_queue) >= 6:
+            if len(ferry_data_queue) >= 24:
                 # Assert ferry_data_queue has 6 or more elements
                 data = ferry_data_queue.pop(0)  # pop an element to save memory
+
+            if len(volume_changes) >= 6:
+                volume_changes.pop(0)
 
         # Delay before updating to next coordinate
         time.sleep(DELAY)
