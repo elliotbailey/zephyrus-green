@@ -42,42 +42,94 @@ FAKE_AIS_DATA = [
     [12 * DELAY, 503586200, -27.4725576437457, 153.00755927654893, 343],
 ]
 
-FERRY_SPIRIT_OF_BRISBANE = [
-    [503586200, -27.491273078778477, 152.99884405165088],
-    [503586200, -27.49219897447619, 153.0022697246721],
-    [503586200, -27.4903709165069, 153.00325995827978],
-    [503586200, -27.490869480781242, 153.0055883454114],
-    [503586200, -27.490916962975348, 153.00815760017733],
-    [503586200, -27.490988186228115, 153.0127340852291],
-    [503586200, -27.491890343442083, 153.01578507526366],
-    [503586200, -27.493955780806832, 153.01835433002955],
-    [503586200, -27.4945299969971, 153.0189425884881],
-    [503586200, -27.49617698290502, 153.01955530075008],
-    [503586200, -27.496901648898334, 153.0195181666736],
-    [503586200, -27.496045224939163, 153.0200937448591],
-    [503586200, -27.494167656790644, 153.0185898147615],
-    [503586200, -27.492981807776975, 153.01738295727574],
-    [503586200, -27.491960649780143, 153.01563765568096],
-    [503586200, -27.491054775887818, 153.01274119771517],
-]
-MMSI_SPIRIT_OF_BRISBANE = 503586200
-
-FERRY_NEVILLE_BONNER = [
-    [503102970, -27.498812109104225, 153.02104066380946],
-    [503102970, -27.497362797501147, 153.02037225043273],
-    [503102970, -27.496918118524547, 153.01942533148238],
-    [503102970, -27.496489907441912, 153.01959243482656],
-    [503102970, -27.4954852518249, 153.01959243482656],
-    [503102970, -27.494612346877705, 153.01901685664106],
-    [503102970, -27.49304768861282, 153.01743865839046],
-    [503102970, -27.492010060869017, 153.01561908864272],
-    [503102970, -27.491087716887222, 153.01372525074203],
-    [503102970, -27.490840659151544, 153.01118156650284],
-    [503102970, -27.49095595283051, 153.00711538512778],
-    [503102970, -27.49090654125031, 153.0047388041772],
-]
 MMSI_NEVILLE_BONNER = 503102970
+MMSI_SPIRIT_OF_BRISBANE = 503586200
+MMSI_KURILPA = 503575300
 
+# Ferrys to display on the dashboard
+ferrys = [MMSI_NEVILLE_BONNER, MMSI_SPIRIT_OF_BRISBANE, MMSI_KURILPA]
+
+# Coordinate index of each ferry
+# NEVILLE_BONNER, SPIRIT_OF_BRISBANE, KURILPA
+ferry_index = [0, 25, 55]
+
+FERRY_PATH_COORDS = [
+    [-27.49654111297432, 153.01956958655086],
+    [-27.49646160675099, 153.01958626195818],
+    [-27.496367308646388, 153.01962169727514],
+    [-27.49621939004738, 153.01966755459827],
+    [-27.49611030006049, 153.01970298974024],
+    [-27.495999361152645, 153.01970298945147],
+    [-27.49589396917427, 153.0197009047569],
+    [-27.495881025599633, 153.0196967371281],
+    [-27.495491094981887, 153.01965052185457],
+    [-27.495293150009164, 153.01956964806757],
+    [-27.495071291863603, 153.0194064039956],
+    [-27.494796293507864, 153.01921320701456],
+    [-27.49454653550824, 153.01902749770335],
+    [-27.494194482231755, 153.01869352112945],
+    [-27.494093516013432, 153.01859767153417],
+    [-27.493914167474614, 153.01842394351414],
+    [-27.493700277525285, 153.01817683069282],
+    [-27.493503657459904, 153.01794169941226],
+    [-27.493503657459904, 153.01794169941226],
+    [-27.493180828274834, 153.0175388308949],
+    [-27.492978505437687, 153.01727360466853],
+    [-27.492817754193315, 153.01703547815265],
+    [-27.492667630740367, 153.0168407840753],
+    [-27.49250422223549, 153.0166011585954],
+    [-27.492370041619715, 153.01641395163276],
+    [-27.492192018638974, 153.01614736978695],
+    [-27.491974138919602, 153.01578943056398],
+    [-27.491802758735705, 153.01549439223527],
+    [-27.491618092285385, 153.01518587553292],
+    [-27.491497195880864, 153.0149013214007],
+    [-27.491369656629804, 153.01456584715336],
+    [-27.491250086968737, 153.0142812931469],
+    [-27.491149118756752, 153.0138963964363],
+    [-27.491066749322638, 153.01348903463924],
+    [-27.490984378055728, 153.01309365397083],
+    [-27.49094186630349, 153.01274619893806],
+    [-27.490908652979144, 153.01237328342143],
+    [-27.490872781206633, 153.01193896379792],
+    [-27.490848868482274, 153.01153010469025],
+    [-27.490831596011127, 153.01101341391305],
+    [-27.490834254253592, 153.01062252686884],
+    [-27.490836910183166, 153.0102630897986],
+    [-27.490851524714756, 153.0097733576089],
+    [-27.49085019639813, 153.00932106650802],
+    [-27.49086082372986, 153.0087879015756],
+    [-27.49086613815559, 153.00831164803577],
+    [-27.490890052559234, 153.00774853133345],
+    [-27.490933893656205, 153.0070401415909],
+    [-27.49097375035064, 153.006514465433],
+    [-27.491013606907124, 153.00586897738035],
+    [-27.490939770596906, 153.00486096429955],
+    [-27.490746325821085, 153.0039719155233],
+    [-27.490587587099323, 153.00315555939522],
+    [-27.491098472329842, 153.00276413950803],
+    [-27.49164407785921, 153.00237271370355],
+    [-27.492075642994845, 153.00123204933016],
+    [-27.49169371867366, 152.99994600567905],
+    [-27.491321693239513, 152.99882211020144],
+    [-27.490984413010334, 152.99768703555202],
+    [-27.490657032301524, 152.9970272404906],
+    [-27.490299910160275, 152.99630592573135],
+    [-27.489927887267257, 152.99580828544555],
+    [-27.48957571956819, 152.99552869559935],
+    [-27.48891104026664, 152.99518203427755],
+    [-27.488231484617813, 152.99510376939375],
+    [-27.487750341942846, 152.99518765324947],
+    [-27.486993562869948, 152.99543571111596],
+    [-27.48622262261095, 152.99581122088833],
+    [-27.485613483809995, 152.99611162508637],
+    [-27.4854421775095, 152.99616527151238],
+    [-27.4847854335487, 152.99655687856583],
+    [-27.48424290586655, 152.99687337924524],
+    [-27.48374796816487, 152.9971255042204],
+    [-27.48340055924328, 152.9973561709974],
+    [-27.483072188142504, 152.99732934580533]
+]
 
 TERMINAL_LOCATIONS = {
     "UQ": {"lat": -27.496794118158004, "lon": 153.019545830108},
@@ -126,6 +178,9 @@ async def get_ferry():
         }
 
     data = ferry_data_queue.pop(0)
+    if len(ferry_data_queue) >= 6:
+        # Assert ferry_data_queue has 6 or more elements
+        data = ferry_data_queue.pop(0)  # pop an elemetn to save memory
 
     return {
         "status": 200,
@@ -237,37 +292,83 @@ def on_message_from_ultrasonic(client, userdata, message):
 def mqtt_sub_thread():
     subscribe.callback(on_message_from_ultrasonic, topics=MQTT_ULTRASONIC_TOPIC, hostname=MQTT_BROKER)
 
-
-current_positions = []
-
+# Global list of dictionaries for each ferry being displayed
+# Each dictionary should contain {"mmsi": int, "lat": int, "lon": int}
+current_position_data = []  
 
 def supply_ferry_data_thread():
-    global current_positions
+    global current_position_data
 
-    DELAY = 5
+    DELAY = 4
 
     while True:
-        # first ferry
-        logger.info("Starting first ferry")
-        for i in range(len(FERRY_NEVILLE_BONNER)):
-            ferry_data_queue.append(FERRY_NEVILLE_BONNER[i])
-            current_positions = [{
-                "mmsi": FERRY_NEVILLE_BONNER[i][0],
-                "lat": FERRY_NEVILLE_BONNER[i][1],
-                "lon": FERRY_NEVILLE_BONNER[i][2]
-            },
-            {
-                "mmsi": FERRY_SPIRIT_OF_BRISBANE[i][0],
-                "lat": FERRY_SPIRIT_OF_BRISBANE[i][1],
-                "lon": FERRY_SPIRIT_OF_BRISBANE[i][2]
-            }]
-            time.sleep(DELAY)
+        # Move ferry's index to next coordinate for all ferries in the list
+        for i in range(len(ferrys)):  # ferrys: list[int]
+            # logger.info("Ferry index")
+            ferry_index[i] += 1  # Increase index for the ferry
+        # Add ferry to queue with updated coordinate
+        for ferry_no, mmsi in enumerate(ferrys):
+            if ferry_index[ferry_no] >= len(FERRY_PATH_COORDS):
+                # Assert the current_ferry_index is at the end bound of the list
+                ferry_index[ferry_no] = 0  # Reset to the first list position
+                # Get the current index for the updated current ferry
+                current_ferry_index = ferry_index[ferry_no]
+            else:
+                # Assert the current ferry index is not at the bounds of the list
+                current_ferry_index = ferry_index[ferry_no]
 
-        logger.info("Starting second ferry")
-        # second ferry
-        for i in range(len(FERRY_SPIRIT_OF_BRISBANE)):
-            ferry_data_queue.append(FERRY_SPIRIT_OF_BRISBANE[i])
-            time.sleep(DELAY)
+            # Return the coordinates associated with the current ferry index
+            lat, long = FERRY_PATH_COORDS[current_ferry_index]
+            logger.info(f"Ferry No. {ferry_no}, Ferry data: {mmsi} {lat} {long}")
+
+            # Display current position on dashboard
+            # Add ferry data for each ferry to the current position list,
+            # Each ferry should only have one data point which is updated,
+            # Each unique mmsi is displayed
+            # Add to the list of dictionaries, so for each ferry index
+            # update the corresponding ferry dictionary
+            # current_position_data = [{}, {}, {}]
+            if ferry_no >= len(current_position_data):
+                # Assert the ferry is not in the current_position_data
+                current_position_data.append({
+                    "mmsi": mmsi,
+                    "lat": lat,
+                    "lon": long
+                })
+            else:
+                # Assert the ferry is in the current_position_data
+                current_position_data[ferry_no] = {
+                    "mmsi": mmsi,
+                    "lat": lat,
+                    "lon": long
+                }
+            # FOR BASENODE: Append a list to the queue [MMSI, LAT, LONG]  
+            ferry_data_queue.append([mmsi, lat, long])
+            
+
+        # Delay before updating to next coordinate
+        time.sleep(DELAY)
+        
+        # # first ferry
+        # for i in range(len(FERRY_PATH_COORDINATES)):
+        #     ferry_data_queue.append(FERRY_NEVILLE_BONNER[i])
+        #     current_positions = [{
+        #         "mmsi": FERRY_NEVILLE_BONNER[i][0],
+        #         "lat": FERRY_NEVILLE_BONNER[i][1],
+        #         "lon": FERRY_NEVILLE_BONNER[i][2]
+        #     },
+        #     {
+        #         "mmsi": FERRY_SPIRIT_OF_BRISBANE[i][0],
+        #         "lat": FERRY_SPIRIT_OF_BRISBANE[i][1],
+        #         "lon": FERRY_SPIRIT_OF_BRISBANE[i][2]
+        #     }]
+        #     time.sleep(DELAY)
+
+        # logger.info("Starting second ferry")
+        # # second ferry
+        # for i in range(len(FERRY_SPIRIT_OF_BRISBANE)):
+        #     ferry_data_queue.append(FERRY_SPIRIT_OF_BRISBANE[i])
+        #     time.sleep(DELAY)
 
 
 MAP_OUTPUT = "dashboard.html"
@@ -278,7 +379,7 @@ async def websocket_endpoint(ws: WebSocket):
     try:
         while True:
             # Send the latest position as JSON
-            await ws.send_text(json.dumps(current_positions))
+            await ws.send_text(json.dumps(current_position_data))
             await asyncio.sleep(1)  # broadcast once per second
     except Exception:
         await ws.close()
