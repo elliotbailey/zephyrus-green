@@ -32,6 +32,7 @@
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 static FATFS fat_fs;
 
+
 static struct fs_mount_t fat_storage_mnt = {
     .type = FS_FATFS,
     .fs_data = &fat_fs,
@@ -52,6 +53,8 @@ void ferry_departing_action(int mmsi);
 void fs_init(void);
 void mount_fs();
 static void usb_status_cb(enum usb_dc_status_code status, const uint8_t *param);
+void sync_rtc_with_server(void);
+void log_ferry_event(int mmsi, bool arriving);
 
 int current_volume = 100;
 
@@ -71,6 +74,13 @@ static const char GET_VOL_CHANGE[] =
     "Connection: close\r\n"
     "\r\n";
 
+/* HTTP get for RTC syncing */
+static const char GET_RTC[] =
+    "GET /rtc HTTP/1.1\r\n"
+    "Host: " SERVER_IP "\r\n"
+    "Connection: close\r\n"
+    "\r\n";
+
 int main(void) {
 
     mount_fs();
@@ -78,6 +88,8 @@ int main(void) {
 
     init_rtc();
     setup_wifi();
+
+    sync_rtc_with_server();
 
     while(1) {
         char packet_buf[512];
@@ -178,6 +190,54 @@ void handle_volume_change(void) {
         send_volume(current_volume);
     } else {
         printk("JSON parse failed for volume change\n");
+    }
+}
+
+void sync_rtc_with_server(void) {
+    char packet_buf[128];
+    int sock = connect_to_ip();
+    int ret = zsock_send(sock, GET_RTC, strlen(GET_RTC), 0);
+    if (ret < 0) {
+        printk("HTTP send failed: %d\n", ret);
+        return;
+    }
+    
+    while (true) {
+        int rx = zsock_recv(sock, packet_buf, sizeof(packet_buf) - 1, 0);
+        if (rx > 0) {
+            packet_buf[rx] = '\0';
+            printk("%s", packet_buf);
+        } else if (rx == 0) {
+            /* peer closed cleanly */
+            break;
+        } else {
+            printk("HTTP recv error: %d\n", rx);
+            break;
+        }
+    }
+    int closeret = zsock_close(sock);
+    if (closeret < 0) {
+        printk("Socket close error handle volume change: %d\n", closeret);
+    }
+    printk("\n");
+
+    // process packet
+    int year, mon, day, hour, min, sec;
+    if (sscanf(packet_buf, "{\"year\":%d,\"mon\":%d,\"day\":%d,\"hour\":%d,\"min\":%d,\"sec\":%d", &year, &mon, &day, &hour, &min, &sec) == 6) {
+        printk("parsed time: %d %d %d %d %d %d\n", year, mon, day, hour, min, sec);;
+
+        struct rtc_time set_time = {
+            .tm_year = year - 1900,  // Year since 1900
+            .tm_mon = mon - 1,         // Month (0-based)
+            .tm_mday = day,           // Day
+            .tm_hour = hour,           // Hour
+            .tm_min = min,            // Minute
+            .tm_sec = sec              // Second
+        };
+        set_rtc_time(&set_time);
+
+    } else {
+        printk("JSON parse failed for RTC sync\n");
     }
 }
 
@@ -288,12 +348,14 @@ void ferry_arriving_action(int mmsi) {
     printk("Ferry %d has arrived at terminal\n", mmsi);
     // send update to webserver
     send_arriving(mmsi);
+    log_ferry_event(mmsi, true);
 }
 
 void ferry_departing_action(int mmsi) {
     printk("Ferry %d has left terminal\n", mmsi);
     // send update to webserver
     send_departing(mmsi);
+    log_ferry_event(mmsi, false);
 }
 
 
@@ -337,4 +399,30 @@ static void usb_status_cb(enum usb_dc_status_code status, const uint8_t *param)
     default:
         break;
     }
+}
+
+
+void log_ferry_event(int mmsi, bool arriving) {
+    // generate line to write
+    char entry_buf[128];
+    char formatted_time[32];
+    format_rtc_time(formatted_time, sizeof(formatted_time));
+
+    char *status;
+    if (arriving) {
+        status = "ARRIVING at";
+    } else {
+        status = "DEPARTING from";
+    }
+
+    snprintf(entry_buf, sizeof(entry_buf), "%s: MMSI %d is %s terminal.", formatted_time, mmsi, status);
+
+    int rc;
+    struct fs_file_t file;
+    fs_file_t_init(&file);
+    // open file in append mode
+    rc = fs_open(&file, "/NAND:/FERRYLOG.txt", FS_O_CREATE | FS_O_WRITE | FS_O_APPEND);
+    fs_write(&file, entry_buf, strlen(entry_buf));
+    fs_write(&file, "\n", 1);
+    fs_close(&file);
 }

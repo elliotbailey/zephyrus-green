@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <zephyr/device.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/rtc.h>
@@ -60,4 +61,18 @@ void init_rtc(void) {
     };
     set_rtc_time(&set_time);
     LOG_DBG("RTC initialised");
+}
+
+
+void format_rtc_time(char *buf, size_t maxlen) {
+    struct rtc_time time;
+    get_rtc_time(&time);
+    snprintf(buf, maxlen, "%04d-%02d-%02d %02d:%02d:%02d",
+        time.tm_year + 1900,
+        time.tm_mon + 1,
+        time.tm_mday,
+        time.tm_hour,
+        time.tm_min,
+        time.tm_sec
+    );
 }
