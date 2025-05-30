@@ -148,13 +148,11 @@ client = mqtt.Client()
 client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
 client.loop_start()
 
-
 @app.get("/")
 async def root():
     return {
         "message": "Hello World"
     }
-
 
 def reset_path():
     global sim_start_time, already_sent_packets
@@ -162,9 +160,7 @@ def reset_path():
     sim_start_time = time.time()
     logger.info("Reset path")
 
-
 ferry_data_queue = []
-
 
 @app.get("/ferry")
 async def get_ferry():
@@ -178,9 +174,6 @@ async def get_ferry():
         }
 
     data = ferry_data_queue.pop(0)
-    if len(ferry_data_queue) >= 6:
-        # Assert ferry_data_queue has 6 or more elements
-        data = ferry_data_queue.pop(0)  # pop an elemetn to save memory
 
     return {
         "status": 200,
@@ -192,7 +185,6 @@ async def get_ferry():
 
 # a 1 means increase, 0 means decrease
 volume_changes = []
-
 
 @app.get("/volumechange")
 async def get_volume_change():
@@ -222,13 +214,30 @@ def send_volume_to_speaker(volume):
 class VolumeReq(BaseModel):
     volume: int
 
+volume = 100
+
+@app.get("/currentvolume")
+async def get_current_volume():
+    return {
+        "volume": volume
+    }
 
 @app.post("/volume")
 async def change_volume(vol: VolumeReq):
-
+    volume = vol.volume
     send_volume_to_speaker(vol.volume)
     return {"status": "ok"}
 
+
+
+class VolumeChange(BaseModel):
+    change: int
+
+@app.post("/volume_value")
+async def change_volume(vol: VolumeChange):
+    volume_changes.append(vol.change)  # Append the change to the queue
+    logger.info(f"Dashboard vol change: {vol.change}")
+    return {"status": "ok"}
 
 def send_arrival_to_speaker():
     client.publish(MQTT_SPEAKER_TOPIC, payload="Arrive", qos=1)
@@ -240,7 +249,6 @@ def send_departure_to_speaker():
 
 class FerryStatusReq(BaseModel):
     mmsi: int
-
 
 @app.post("/arriving")
 async def ferry_arriving(ferry: FerryStatusReq):
@@ -330,31 +338,13 @@ def supply_ferry_data_thread():
                 }
             # FOR BASENODE: Append a list to the queue [MMSI, LAT, LONG]  
             ferry_data_queue.append([mmsi, lat, long])
-            
+
+            if len(ferry_data_queue) >= 6:
+                # Assert ferry_data_queue has 6 or more elements
+                data = ferry_data_queue.pop(0)  # pop an element to save memory
 
         # Delay before updating to next coordinate
         time.sleep(DELAY)
-        
-        # # first ferry
-        # for i in range(len(FERRY_PATH_COORDINATES)):
-        #     ferry_data_queue.append(FERRY_NEVILLE_BONNER[i])
-        #     current_positions = [{
-        #         "mmsi": FERRY_NEVILLE_BONNER[i][0],
-        #         "lat": FERRY_NEVILLE_BONNER[i][1],
-        #         "lon": FERRY_NEVILLE_BONNER[i][2]
-        #     },
-        #     {
-        #         "mmsi": FERRY_SPIRIT_OF_BRISBANE[i][0],
-        #         "lat": FERRY_SPIRIT_OF_BRISBANE[i][1],
-        #         "lon": FERRY_SPIRIT_OF_BRISBANE[i][2]
-        #     }]
-        #     time.sleep(DELAY)
-
-        # logger.info("Starting second ferry")
-        # # second ferry
-        # for i in range(len(FERRY_SPIRIT_OF_BRISBANE)):
-        #     ferry_data_queue.append(FERRY_SPIRIT_OF_BRISBANE[i])
-        #     time.sleep(DELAY)
 
 
 MAP_OUTPUT = "dashboard.html"

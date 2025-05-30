@@ -18,37 +18,154 @@
       border: 1px solid #666;
       font-family: sans-serif;
     }
+    #volume-controls {
+      position: absolute;
+      top: 10px; left: 10px;
+      background: white;
+      padding: 10px;
+      border: 1px solid #666;
+      font-family: sans-serif;
+      border-radius: 4px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      z-index: 1000;
+    }
+    #volume-controls button {
+      margin: 2px;
+      padding: 8px 12px;
+      border: 1px solid #ccc;
+      background: #f8f8f8;
+      cursor: pointer;
+      border-radius: 3px;
+      font-size: 14px;
+    }
+    #volume-controls button:hover {
+      background: #e8e8e8;
+    }
+    #volume-controls button:active {
+      background: #d8d8d8;
+    }
+    #volume-display {
+      margin-top: 8px;
+      font-weight: bold;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
-
   <div id="map"></div>
   <div id="status">Connecting…</div>
-
+  <div id="volume-controls">
+    <button id="volume-down">Volume Down</button>
+    <button id="volume-up">Volume Up</button>
+    <div id="volume-display">Volume: 100</div>
+  </div>
   <script>
+    // Volume management
+    let currentVolume = 100; // Start at 50%
+    const volumeStep = 5;
+    const minVolume = 0;
+    const maxVolume = 255;
+
+    function updateVolumeDisplay() {
+      document.getElementById('volume-display').innerText = `Volume: ${currentVolume}`;
+    }
+
+    async function volumeUp() {
+      if (currentVolume < maxVolume) {
+        // Add volume increase (1) to server queue
+        try {
+          // Add 1 to the volume_changes queue on server
+          await fetch('/volume_value', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ change: 1 })
+          });
+          
+          // currentVolume = Math.min(currentVolume + volumeStep, maxVolume);
+          console.log(`Volume increased to ${currentVolume}%`);
+        } catch (error) {
+          console.error('Error increasing volume:', error);
+        }
+      }
+    }
+
+    async function volumeDown() {
+      if (currentVolume > minVolume) {
+        // Add volume decrease (0) to server queue
+        try {
+          // Add 0 to the volume_changes queue on server
+          await fetch('/volume_value', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ change: 0 })
+          });
+          
+          // currentVolume = Math.max(currentVolume - volumeStep, minVolume);
+          updateVolumeDisplay();
+          console.log(`Volume decreased to ${currentVolume}%`);
+        } catch (error) {
+          console.error('Error decreasing volume:', error);
+        }
+      }
+    }
+
+    // Poll for volume changes from server (for external volume changes like MQTT)
+    async function checkVolumeChanges() {
+      try {
+        const response = await fetch('/currentvolume');
+        if (response.ok) {
+          const data = await response.json();
+          // Apply volume change from server (from MQTT or other sources)
+          currentVolume = data.volume
+          updateVolumeDisplay();
+        }
+      } catch (error) {
+        console.error('Error checking volume changes:', error);
+      }
+    }
+
+    // Check for volume changes every 2 seconds (for MQTT volume changes)
+    setInterval(checkVolumeChanges, 2000);
+
+    // Event listeners for volume buttons
+    document.getElementById('volume-up').addEventListener('click', volumeUp);
+    document.getElementById('volume-down').addEventListener('click', volumeDown);
+
+    // Keyboard shortcuts (optional enhancement)
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowUp' && e.ctrlKey) {
+        e.preventDefault();
+        volumeUp();
+      } else if (e.key === 'ArrowDown' && e.ctrlKey) {
+        e.preventDefault();
+        volumeDown();
+      }
+    });
+
     // 1) init map
     const map = L.map('map').setView([-27.4968, 153.0197], 15);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap'
     }).addTo(map);
-
+    
     // 2) markers store
     const markers = {};
-
+    
     // 3) open WS
     const socket = new WebSocket(`ws://${location.host}/ws/position`);
-
     socket.onopen = () => {
       document.getElementById('status').innerText =
         'Connected. Waiting for data…';
     };
-
     socket.onmessage = (evt) => {
       const list = JSON.parse(evt.data);  // now an array of {mmsi,lat,lon}
       list.forEach(ship => {
         const key = ship.mmsi;
         const latlng = [ ship.lat, ship.lon ];
-
         if (markers[key]) {
           // move existing marker
           markers[key].setLatLng(latlng);
@@ -59,11 +176,9 @@
             .bindPopup(`MMSI: ${key}`);
         }
       });
-
       document.getElementById('status').innerText =
         `Last update: ${new Date().toLocaleTimeString()}`;
     };
-
     socket.onerror = () => {
       document.getElementById('status').innerText = 'WebSocket error';
     };
@@ -71,6 +186,5 @@
       document.getElementById('status').innerText = 'Disconnected';
     };
   </script>
-
 </body>
 </html>
